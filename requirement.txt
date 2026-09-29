@@ -1,0 +1,11 @@
+gradio
+pandas
+plotly
+spacy
+youtube-transcript-api
+google-api-python-client
+google-genai
+transformers
+torch
+sentence-transformers
+python-dotenv
