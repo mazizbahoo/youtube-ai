@@ -2,7 +2,7 @@
 
 AI-powered YouTube analyzer that **summarizes videos**, **recommends related content**, and **analyzes comment sentiment**. Built with Python, Gradio, Transformers, spaCy, and Gemini.
 
-> **Status:** in development. This is a solo project, built in phases. See the [Roadmap](#roadmap) for progress.
+> **Status:** all three features work end to end. This is a solo project, built in phases; the written report is the last thing left. See the [Roadmap](#roadmap).
 
 ---
 
@@ -33,8 +33,7 @@ youtube-ai/
 ├── sentiment.py        # Comment cleaning, sentiment classification, charts, spaCy keywords
 ├── summarizer.py       # Gemini summary + TF-IDF extractive summary
 ├── recommender.py      # Embedding-based reranking of search results
-├── notebooks/          # Scratch notebooks used to prototype each module
-├── requirements.txt
+├── requirements.txt    # Pinned versions (pip freeze)
 ├── .env                # API keys (not committed)
 └── README.md
 ```
@@ -54,17 +53,9 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 
 ```bash
 pip install -r requirements.txt
-python -m spacy download en_core_web_sm
 ```
 
-If `requirements.txt` doesn't exist yet, install the packages directly:
-
-```bash
-pip install gradio pandas plotly spacy scikit-learn youtube-transcript-api \
-            google-api-python-client google-genai transformers torch \
-            sentence-transformers python-dotenv
-python -m spacy download en_core_web_sm
-```
+`requirements.txt` pins exact versions and includes the spaCy English model (`en_core_web_sm`). If the model is still missing, run `python -m spacy download en_core_web_sm`.
 
 Check the install with:
 
@@ -100,9 +91,11 @@ Then open the local URL Gradio prints (usually http://127.0.0.1:7860).
 
 ### Summarize
 
-1. `get_video_id()` pulls the 11-character ID (`[A-Za-z0-9_-]{11}`) from `watch?v=`, `youtu.be/`, and `/shorts/` links with regex.
-2. `get_transcript()` fetches English captions with `YouTubeTranscriptApi().fetch(...)`.
-3. **LLM summary:** the whole transcript goes to Gemini in a single prompt (the large context window means no chunking). The prompt asks for a 2-line overview, 5 key points, and a one-line takeaway.
+1. `get_video_id()` pulls the 11-character ID (`[A-Za-z0-9_-]{11}`) from `watch?v=`, `youtu.be/`, `/shorts/` and `/embed/` links with regex. It returns `None` for anything else.
+2. `get_transcript()` lists the video's caption tracks and prefers English. If there's no English track, it falls back to whatever language exists.
+3. **LLM summary:** the whole transcript goes to Gemini in a single prompt (the large context window means no chunking). The prompt asks for a 2-line overview, 5 key points, and a one-line takeaway, always in English.
+   - Free-tier Gemini models are often overloaded (`503`) or rate-limited (`429`). The SDK's slow automatic retries are turned off. Instead, `llm_summary()` moves straight on to the next model in `FALLBACK_MODELS`.
+   - If every model fails, the app still shows the extractive summary and prints the error in the LLM panel.
 4. **Extractive summary:**
    - Split the transcript into ~25-word chunks. Auto-generated captions have no punctuation, so sentence splitting doesn't work.
    - Fit a `TfidfVectorizer` on the chunks and score each chunk by the sum of its TF-IDF weights.
@@ -118,43 +111,49 @@ The LLM summary usually reads better because it is **abstractive** (it writes ne
 4. `util.cos_sim()` scores each video and the top 5 are returned. This is **KNN**: nearest neighbours in embedding space.
 5. **"More like this video" mode:** when the input is a link, the video's title becomes the search query, its title + description becomes the comparison vector, and the original video is removed from the results.
 
-Results render as an HTML list with thumbnails and clickable titles.
+Results render as HTML cards with a thumbnail, a clickable title, the match percentage, and the video's original YouTube rank, so you can see how the reranking changed the order.
 
 ### Sentiment
 
 1. `get_comments()` pages through `commentThreads().list(...)` (100 per call) until it reaches 200 comments or runs out of pages.
 2. Regex cleaning replaces URLs with `http` and `@username` with `@user`, the format the Twitter-RoBERTa model was trained on. Emojis are kept on purpose because they carry a lot of sentiment.
 3. The model classifies comments in batches of 16, and the results go into a DataFrame with `comment`, `label`, and `score` columns.
-4. Outputs: a Plotly pie chart of labels, an overall verdict (the most common label), and optionally a histogram of confidence scores.
+   - Each batch is padded to its longest comment. Classifying the comments in order of length keeps batches uniform, which made this step about 4× faster on CPU (roughly 90s → 23s for 200 comments).
+   - The predictions are then put back in the original comment order.
+4. Outputs: an overall verdict (the most common label), a Plotly donut chart of the labels, a histogram of confidence scores, and the full comment table.
 5. **Keywords:** positive and negative comments go through spaCy separately. The app keeps lemmas of non-stopword nouns and uses `Counter` to find the top 10 for each group, for example *"people complaining mention: audio, ads, length."*
 
 ## Roadmap
 
 Each phase has a checkpoint that must pass before moving on.
 
-- [ ] **Phase 0: Setup.** venv, dependencies, API keys, `.env`.
+- [x] **Phase 0: Setup.** venv, dependencies, API keys, `.env`.
   *Checkpoint:* `import gradio, transformers, spacy` runs.
-- [ ] **Phase 1: `youtube_utils.py`.** `get_video_id`, `get_transcript`, `search_videos`, `get_comments`, video metadata. Prototype in a notebook first.
+- [x] **Phase 1: `youtube_utils.py`.** `get_video_id`, `get_transcript`, `search_videos`, `get_comments`, video metadata.
   *Checkpoint:* for a real link, print its transcript, 5 search results, and 10 comments.
-- [ ] **Phase 2: `sentiment.py`.** Cleaning, classification, pie chart, spaCy keywords.
+- [x] **Phase 2: `sentiment.py`.** Cleaning, classification, charts, spaCy keywords.
   *Checkpoint:* on a popular video, the pie chart looks sensible and the negative keywords match what the comments say.
-- [ ] **Phase 3: `summarizer.py`.** Gemini summary + TF-IDF extractive summary.
+- [x] **Phase 3: `summarizer.py`.** Gemini summary + TF-IDF extractive summary.
   *Checkpoint:* the summary of a 10-minute video is accurate (watch it to check).
-- [ ] **Phase 4: `recommender.py`.** Embedding rerank + "more like this" mode.
+- [x] **Phase 4: `recommender.py`.** Embedding rerank + "more like this" mode.
   *Checkpoint:* for "linear regression", the reranked order makes more sense than YouTube's raw order.
-- [ ] **Phase 5: `app.py`.** Gradio UI with three tabs, `gr.Error` popups, HTML thumbnails.
+- [x] **Phase 5: `app.py`.** Styled Gradio UI with three tabs, `gr.Error` popups, HTML thumbnail cards.
   *Checkpoint:* all three tabs work back to back on 3 different videos.
-- [ ] **Phase 6: Polish.** Edge-case testing, a loading hint, `pip freeze > requirements.txt`, the report.
+- [ ] **Phase 6: Polish.**
+  - [x] Edge-case testing
+  - [x] A loading hint
+  - [x] `pip freeze > requirements.txt`
+  - [ ] The report
 
-### Edge cases to test
+### Edge cases
 
-- [ ] YouTube Shorts link
-- [ ] Video with no captions
-- [ ] Video with comments disabled
-- [ ] Non-English video
-- [ ] Garbage / non-YouTube link
-
-Each one should show a clean `gr.Error` popup instead of crashing.
+- [x] YouTube Shorts link: the ID is parsed correctly.
+- [x] Non-English video: the transcript falls back to the available language, and Gemini summarizes it in English.
+- [x] Garbage or non-YouTube link: popup saying "That doesn't look like a YouTube link."
+- [x] Empty input: popup asking for a topic or link.
+- [x] Video that doesn't exist: popups in the Sentiment and Recommend tabs.
+- [ ] Video with comments disabled: goes through the same `HttpError` path as a missing video, but hasn't been tested on a real video yet.
+- [ ] Video with no captions at all: handled with a "no captions" popup, but hasn't been tested on a real video yet.
 
 ## Course mapping
 
@@ -171,9 +170,10 @@ Each one should show a clean `gr.Error` popup instead of crashing.
 
 ## Notes and gotchas
 
-- **YouTube API quota:** 10,000 units per day. A `search` costs **100 units**, and a comments or videos call costs about **1**. Don't put search in a loop while testing, and cache results in the notebook.
-- **Transcript API versions:** the code uses the 1.x syntax (`YouTubeTranscriptApi().fetch(...)`). If `fetch` doesn't exist, you have an old version. Upgrade it, or use `YouTubeTranscriptApi.get_transcript(video_id)`, which returns a list of dicts with a `"text"` key.
-- **Gemini model names change often.** If `gemini-2.5-flash` fails, check AI Studio for the current free model and update the name.
+- **YouTube API quota:** 10,000 units per day. A `search` costs **100 units**, and a comments or videos call costs about **1**. Don't put search in a loop while testing.
+- **Transcript API versions:** the code uses the 1.x syntax (`YouTubeTranscriptApi().list(...)` / `.fetch()`). If those don't exist, you have an old version, so upgrade it.
+- **Gemini model names change often.** `gemini-2.5-flash` is no longer available to new users. The app uses `gemini-3.8-flash` with fallbacks (see `GEMINI_MODEL` and `FALLBACK_MODELS` in `summarizer.py`). If a name stops working, check AI Studio for the current free models.
+- **API keys in logs:** a `googleapiclient` `HttpError` message includes the request URL, and that URL contains your YouTube API key. The code prints only the status code and reason, never the whole error.
 - **Load models once.** The sentiment pipeline and the embedding model are created at module import, not inside functions. Otherwise they reload on every button click.
 - **Run it locally.** Transcript fetching is often blocked from cloud hosts such as Hugging Face Spaces, so demo on your own machine.
 
@@ -181,12 +181,14 @@ Each one should show a clean `gr.Error` popup instead of crashing.
 
 | Error | Likely cause | Fix |
 |-------|--------------|-----|
-| `TranscriptsDisabled` / `NoTranscriptFound` | The video has no (English) captions | Try another video. The app shows a popup. |
+| `TranscriptsDisabled` / `NoTranscriptFound` | The video has no captions in any language | Try another video. The app shows a popup. |
 | `HttpError 403` on comments | Comments are disabled on the video | Expected. The app shows a popup. |
 | `HttpError 403 quotaExceeded` | Daily YouTube quota is used up | Wait until the quota resets (midnight Pacific time). |
 | `OSError: [E050] Can't find model 'en_core_web_sm'` | spaCy model not downloaded | `python -m spacy download en_core_web_sm` |
 | `AttributeError: ... has no attribute 'fetch'` | Old `youtube-transcript-api` | `pip install -U youtube-transcript-api` |
-| Gemini `404 model not found` | Model was renamed | Update the model name from AI Studio. |
+| Gemini `404 model not found` | Model was renamed or retired | Update `GEMINI_MODEL` from AI Studio. |
+| Gemini `503 UNAVAILABLE` / `429` | Model overloaded, or the free-tier rate limit was hit | Handled automatically by the fallback models. If all of them fail, wait a few minutes. |
+| `MemoryError` or a very slow first run | Two copies of the app are running, and each one loads all the models | Run only one copy of `app.py`. |
 
 ## License
 
