@@ -14,15 +14,27 @@ BG = "#040404"       # page background: rgb(4, 4, 4)
 SURFACE = "#161616"  # cards, panels, blocks: rgb(22, 22, 22)
 BORDER = "#2a2a2a"   # subtle borders between surfaces
 
+# Light mode: white page, black text, light-gray cards.
+LIGHT_SURFACE = "#f4f4f4"
+LIGHT_BORDER = "#e2e2e2"
+
 # "neutral" grays have no blue tint (the old "slate" palette did).
-# The colors are set for both light and dark mode, and FORCE_DARK below keeps
-# the page in dark mode so text stays light on these dark surfaces.
+# Every color has a light and a dark (`_dark`) value; the theme button switches between them.
 THEME = gr.themes.Soft(
     primary_hue="red",
     neutral_hue="neutral",
     font=[gr.themes.GoogleFont("Inter"), "system-ui", "sans-serif"],
 ).set(
-    body_background_fill=BG,
+    body_background_fill="white",
+    body_text_color="black",
+    background_fill_primary="white",
+    background_fill_secondary=LIGHT_SURFACE,
+    block_background_fill=LIGHT_SURFACE,
+    panel_background_fill=LIGHT_SURFACE,
+    input_background_fill="white",
+    border_color_primary=LIGHT_BORDER,
+    block_border_color=LIGHT_BORDER,
+    input_border_color=LIGHT_BORDER,
     body_background_fill_dark=BG,
     background_fill_primary_dark=BG,
     background_fill_secondary_dark=SURFACE,
@@ -45,12 +57,23 @@ THEME = gr.themes.Soft(
     block_radius="12px",
 )
 
-# Runs in the browser on page load: switch Gradio to its dark mode.
-FORCE_DARK = "() => { document.body.classList.add('dark'); }"
+# Runs in the browser on page load: use the theme picked last time (dark by default).
+LOAD_THEME = """() => {
+  let theme = 'dark';
+  try { theme = localStorage.getItem('theme') || 'dark'; } catch (e) {}
+  document.body.classList.toggle('dark', theme === 'dark');
+}"""
+
+# Runs in the browser when the theme button is clicked.
+TOGGLE_THEME = """() => {
+  const dark = document.body.classList.toggle('dark');
+  try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (e) {}
+}"""
 
 CSS = """
 .gradio-container { width: 100% !important; max-width: 1100px !important; margin: 0 auto !important; }
 #header { text-align: center; padding: 18px 0 6px; }
+#theme-btn { position: absolute; top: 16px; right: 0; width: auto; min-width: 0; z-index: 10; }
 #header h1 { font-size: 2rem; margin-bottom: 4px; }
 #header p { opacity: .7; margin: 0; }
 .panel { border: 1px solid var(--border-color-primary); border-radius: 12px;
@@ -58,9 +81,13 @@ CSS = """
 .panel-title { font-size: .8rem; font-weight: 600; letter-spacing: .06em;
                text-transform: uppercase; opacity: .6; margin-bottom: 6px; }
 .video-card { display: flex; gap: 20px; align-items: flex-start; margin: 8px 0; }
+/* Gradio pads HTML blocks and links; remove it so everything lines up on one left edge. */
+.html-container { padding: 0 !important; }
+.video-card a, .rec-card a { padding: 0 !important; }
 .video-card a:focus { outline: none; }
-.video-card .thumb { width: 360px; max-width: 45%; border-radius: 12px; display: block; flex-shrink: 0; }
-.video-card .title { font-weight: 600; font-size: 1.2rem; text-decoration: none;
+.video-card .thumb-link { flex: 0 0 360px; max-width: 45%; }
+.video-card .thumb { width: 100%; border-radius: 12px; display: block; }
+.video-card .title { display: block; font-weight: 600; font-size: 1.2rem; text-decoration: none;
                      color: var(--body-text-color); }
 .video-card .title:hover { color: #e62117; }
 .video-desc { opacity: .7; font-size: .9rem; margin-top: 8px; white-space: pre-line;
@@ -81,7 +108,7 @@ button.gallery-item { margin: 2px !important; }
   .rec-card { flex-direction: column; }
   .rec-card img { width: 100%; }
   .video-card { flex-direction: column; }
-  .video-card .thumb { width: 100%; max-width: 100%; }
+  .video-card .thumb-link { flex-basis: auto; width: 100%; max-width: 100%; }
 }
 """
 
@@ -93,7 +120,7 @@ def video_card(video_id):
     """Thumbnail with the video's title, channel and a truncated description beside it."""
     link = f"https://www.youtube.com/watch?v={video_id}"
     # The thumbnail comes from YouTube's image CDN (no API quota needed).
-    thumb = (f"<a href='{link}' target='_blank'>"
+    thumb = (f"<a class='thumb-link' href='{link}' target='_blank'>"
              f"<img class='thumb' src='https://i.ytimg.com/vi/{video_id}/hqdefault.jpg' alt=''></a>")
     try:
         info = get_video_info(video_id)
@@ -133,8 +160,8 @@ def results_html(df):
         <div class="rec-card">
           <a href="{link}" target="_blank"><img src="{row.thumbnail}" alt=""></a>
           <div>
-            <a class="title" href="{link}" target="_blank">{rank}. {html.escape(row.title)}</a>
-            <div class="rec-meta">{html.escape(row.channel)}</div>
+            <a class="title" href="{link}" target="_blank">{rank}. {html.escape(html.unescape(row.title))}</a>
+            <div class="rec-meta">{html.escape(html.unescape(row.channel))}</div>
             <span class="rec-badge">{row.similarity:.0%} match · YouTube rank #{row.youtube_rank}</span>
           </div>
         </div>""")
@@ -191,6 +218,8 @@ with gr.Blocks(title="YouTube AI Analyzer") as app:
         "<p>Summarize videos, find better recommendations and read the mood of the comments.</p>"
         "<p style='font-size:.85rem'>The first run downloads the AI models, so it can take a minute.</p></div>"
     )
+    theme_btn = gr.Button("◐ Light / Dark", size="sm", elem_id="theme-btn")
+    theme_btn.click(None, js=TOGGLE_THEME)
 
     with gr.Tab("📝 Summarize"):
         with gr.Row(equal_height=True):
@@ -232,4 +261,4 @@ with gr.Blocks(title="YouTube AI Analyzer") as app:
 
 
 if __name__ == "__main__":
-    app.launch(theme=THEME, css=CSS, js=FORCE_DARK)
+    app.launch(theme=THEME, css=CSS, js=LOAD_THEME)
