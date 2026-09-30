@@ -19,7 +19,8 @@ LIGHT_SURFACE = "#f4f4f4"
 LIGHT_BORDER = "#e2e2e2"
 
 # "neutral" grays have no blue tint (the old "slate" palette did).
-# Every color has a light and a dark (`_dark`) value; the theme button switches between them.
+# Every color has a light and a dark (`_dark`) value; Gradio's own theme setting
+# (Settings in the footer: light, dark or system) picks which one is used.
 THEME = gr.themes.Soft(
     primary_hue="red",
     neutral_hue="neutral",
@@ -57,23 +58,9 @@ THEME = gr.themes.Soft(
     block_radius="12px",
 )
 
-# Runs in the browser on page load: use the theme picked last time (dark by default).
-LOAD_THEME = """() => {
-  let theme = 'dark';
-  try { theme = localStorage.getItem('theme') || 'dark'; } catch (e) {}
-  document.body.classList.toggle('dark', theme === 'dark');
-}"""
-
-# Runs in the browser when the theme button is clicked.
-TOGGLE_THEME = """() => {
-  const dark = document.body.classList.toggle('dark');
-  try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (e) {}
-}"""
-
 CSS = """
 .gradio-container { width: 100% !important; max-width: 1100px !important; margin: 0 auto !important; }
 #header { text-align: center; padding: 18px 0 6px; }
-#theme-btn { position: absolute; top: 16px; right: 0; width: auto; min-width: 0; z-index: 10; }
 #header h1 { font-size: 2rem; margin-bottom: 4px; }
 #header p { opacity: .7; margin: 0; }
 .panel { border: 1px solid var(--border-color-primary); border-radius: 12px;
@@ -218,8 +205,6 @@ with gr.Blocks(title="YouTube AI Analyzer") as app:
         "<p>Summarize videos, find better recommendations and read the mood of the comments.</p>"
         "<p style='font-size:.85rem'>The first run downloads the AI models, so it can take a minute.</p></div>"
     )
-    theme_btn = gr.Button("◐ Light / Dark", size="sm", elem_id="theme-btn")
-    theme_btn.click(None, js=TOGGLE_THEME)
 
     with gr.Tab("📝 Summarize"):
         with gr.Row(equal_height=True):
@@ -261,4 +246,4 @@ with gr.Blocks(title="YouTube AI Analyzer") as app:
 
 
 if __name__ == "__main__":
-    app.launch(theme=THEME, css=CSS, js=LOAD_THEME)
+    app.launch(theme=THEME, css=CSS)
