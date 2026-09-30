@@ -146,20 +146,16 @@ def recommend_fn(query):
     if not query:
         raise gr.Error("Type a topic or paste a YouTube link.")
     video_id = get_video_id(query)
-    header = ""
     if video_id:
         info = get_video_info(video_id)
         if not info:
             raise gr.Error("Couldn't find that video.")
-        header = video_card(video_id) + "<div class='panel-title' style='margin-top:16px'>Similar videos</div>"
-        yield header + LOADING
         df = recommender.recommend_similar(video_id, info)
     else:
-        yield LOADING
         df = recommender.recommend(query)
     if df.empty:
         raise gr.Error("No results found.")
-    yield header + results_html(df)
+    return results_html(df)
 
 
 def sentiment_fn(url):
