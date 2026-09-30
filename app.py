@@ -67,12 +67,12 @@ CSS = """
          padding: 16px 18px; background: var(--block-background-fill); min-height: 120px; }
 .panel-title { font-size: .8rem; font-weight: 600; letter-spacing: .06em;
                text-transform: uppercase; opacity: .6; margin-bottom: 6px; }
-.video-card { display: flex; gap: 20px; align-items: flex-start; margin: 8px 0; text-align: left; }
+.video-card { display: flex; gap: 20px; align-items: flex-start; margin: 0; padding: 24px 0; text-align: left; }
 /* Gradio pads HTML blocks and links; remove it so everything lines up on one left edge. */
 .html-container { padding: 0 !important; }
 .video-card a, .rec-card a { padding: 0 !important; }
 .video-card a:focus { outline: none; }
-.video-card .thumb-link { flex: 0 0 360px; max-width: 45%; }
+.video-card .thumb-link { flex: 0 0 288px; max-width: 40%; }
 .video-card .thumb { width: 100%; border-radius: 12px; display: block; }
 .video-card .title { display: block; text-align: left !important; font-weight: 600; font-size: 1.2rem; text-decoration: none;
                      color: var(--body-text-color); }
