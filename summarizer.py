@@ -1,10 +1,9 @@
-"""Two summaries of a transcript: an LLM (abstractive) one and a TF-IDF (extractive) one."""
+"""LLM (Gemini) summary of a transcript."""
 import os
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import errors, types
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 load_dotenv()
 
@@ -48,23 +47,3 @@ def llm_summary(text):
             last_error = e
     raise last_error
 
-
-def chunk_words(text, size=25):
-    """Auto-generated transcripts have no punctuation, so split every `size` words."""
-    words = text.split()
-    return [" ".join(words[i:i + size]) for i in range(0, len(words), size)]
-
-
-def extractive_summary(text, n_chunks=5, chunk_size=25):
-    """Extractive summary: pick the chunks with the highest total TF-IDF weight."""
-    chunks = chunk_words(text, chunk_size)
-    if len(chunks) <= n_chunks:
-        return " ".join(chunks)
-
-    tfidf = TfidfVectorizer(stop_words="english")
-    matrix = tfidf.fit_transform(chunks)
-    scores = matrix.sum(axis=1).A1  # one score per chunk
-
-    top = scores.argsort()[::-1][:n_chunks]
-    top_in_order = sorted(top)  # re-sort by original position so it reads in order
-    return "\n\n".join(f"• {chunks[i]}" for i in top_in_order)

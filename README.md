@@ -10,7 +10,7 @@ AI-powered YouTube analyzer that **summarizes videos**, **recommends related con
 
 | Tab | Input | What it does |
 |-----|-------|--------------|
-| **Summarize** | A YouTube link | Fetches the transcript and shows two summaries side by side: an **LLM summary** (Gemini, abstractive) and an **extractive summary** (TF-IDF, built from scratch). |
+| **Summarize** | A YouTube link | Fetches the transcript and shows the video's thumbnail and an **LLM summary** (Gemini). |
 | **Recommend** | A topic *or* a YouTube link | Searches YouTube, embeds every result with a sentence-transformer, and reranks by cosine similarity to your query (nearest neighbours in vector space). With a link, it runs in "more like this video" mode. |
 | **Sentiment** | A YouTube link | Pulls up to 200 top comments, classifies them as positive / neutral / negative with a RoBERTa model, and charts the breakdown. spaCy pulls out the nouns that people praising and complaining mention most. |
 
@@ -21,7 +21,7 @@ AI-powered YouTube analyzer that **summarizes videos**, **recommends related con
 - **LLM:** Google Gemini (`google-genai`)
 - **Sentiment:** `cardiffnlp/twitter-roberta-base-sentiment-latest` via 🤗 Transformers + PyTorch
 - **Embeddings:** `all-MiniLM-L6-v2` via `sentence-transformers`
-- **NLP:** spaCy (`en_core_web_sm`), scikit-learn `TfidfVectorizer`
+- **NLP:** spaCy (`en_core_web_sm`)
 - **Analysis and charts:** Pandas, Plotly
 
 ## Project structure
@@ -31,7 +31,7 @@ youtube-ai/
 ├── app.py              # Gradio UI: three tabs plus the glue functions
 ├── youtube_utils.py    # Video ID parsing, transcripts, search, comments, video metadata
 ├── sentiment.py        # Comment cleaning, sentiment classification, charts, spaCy keywords
-├── summarizer.py       # Gemini summary + TF-IDF extractive summary
+├── summarizer.py       # Gemini summary
 ├── recommender.py      # Embedding-based reranking of search results
 ├── requirements.txt    # Pinned versions (pip freeze)
 ├── .env                # API keys (not committed)
@@ -95,13 +95,7 @@ Then open the local URL Gradio prints (usually http://127.0.0.1:7860).
 2. `get_transcript()` lists the video's caption tracks and prefers English. If there's no English track, it falls back to whatever language exists.
 3. **LLM summary:** the whole transcript goes to Gemini in a single prompt (the large context window means no chunking). The prompt asks for a 2-line overview, 5 key points, and a one-line takeaway, always in English.
    - Free-tier Gemini models are often overloaded (`503`) or rate-limited (`429`). The SDK's slow automatic retries are turned off. Instead, `llm_summary()` moves straight on to the next model in `FALLBACK_MODELS`.
-   - If every model fails, the app still shows the extractive summary and prints the error in the LLM panel.
-4. **Extractive summary:**
-   - Split the transcript into ~25-word chunks. Auto-generated captions have no punctuation, so sentence splitting doesn't work.
-   - Fit a `TfidfVectorizer` on the chunks and score each chunk by the sum of its TF-IDF weights.
-   - Take the top 5 chunks, then re-sort them by their original position so the summary reads in order.
-
-The LLM summary usually reads better because it is **abstractive** (it writes new sentences), while the TF-IDF one is **extractive** (it copies existing ones).
+   - If every model fails, the error is shown in the summary panel.
 
 ### Recommend
 

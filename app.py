@@ -57,6 +57,8 @@ CSS = """
          padding: 16px 18px; background: var(--block-background-fill); min-height: 120px; }
 .panel-title { font-size: .8rem; font-weight: 600; letter-spacing: .06em;
                text-transform: uppercase; opacity: .6; margin-bottom: 6px; }
+.thumb { width: 100%; max-width: 480px; border-radius: 12px; display: block; }
+.loading { opacity: .7; font-style: italic; }
 .rec-card { display: flex; gap: 16px; align-items: flex-start; padding: 12px;
             border: 1px solid var(--border-color-primary); border-radius: 12px;
             background: var(--block-background-fill); margin-bottom: 12px; }
@@ -75,10 +77,22 @@ button.gallery-item { margin: 2px !important; }
 """
 
 
+LOADING = "<p class='loading'>Loading...</p>"
+
+
+def thumbnail_html(video_id):
+    """The video's thumbnail from YouTube's image CDN (no API quota needed)."""
+    link = f"https://www.youtube.com/watch?v={video_id}"
+    return (f"<a href='{link}' target='_blank'>"
+            f"<img class='thumb' src='https://i.ytimg.com/vi/{video_id}/hqdefault.jpg' alt=''></a>")
+
+
 def summarize_fn(url):
     video_id = get_video_id(url)
     if not video_id:
         raise gr.Error("That doesn't look like a YouTube link.")
+    # Show the thumbnail and a loading note right away so the page doesn't look frozen.
+    yield thumbnail_html(video_id), LOADING
     text = get_transcript(video_id)
     if not text:
         raise gr.Error("This video has no captions, so it can't be summarized.")
@@ -86,7 +100,7 @@ def summarize_fn(url):
         llm = summarizer.llm_summary(text)
     except Exception as e:
         llm = f"*LLM summary failed: {e}*"
-    return llm, summarizer.extractive_summary(text)
+    yield thumbnail_html(video_id), llm
 
 
 def results_html(df):
@@ -126,6 +140,8 @@ def sentiment_fn(url):
     video_id = get_video_id(url)
     if not video_id:
         raise gr.Error("That doesn't look like a YouTube link.")
+    # Show the thumbnail and a loading note right away so the page doesn't look frozen.
+    yield gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), thumbnail_html(video_id) + LOADING
     comments = get_comments(video_id)
     if comments is None:
         raise gr.Error("Comments are disabled on this video (or it doesn't exist).")
@@ -142,7 +158,8 @@ def sentiment_fn(url):
     )
     # The last value un-hides the results column (it starts hidden so the page has no
     # empty placeholder boxes before the first analysis).
-    return sentiment.pie_chart(counts), sentiment.score_histogram(df), report, df, gr.Column(visible=True)
+    yield (sentiment.pie_chart(counts), sentiment.score_histogram(df), report, df,
+           gr.Column(visible=True), thumbnail_html(video_id))
 
 
 with gr.Blocks(title="YouTube AI Analyzer") as app:
@@ -157,15 +174,12 @@ with gr.Blocks(title="YouTube AI Analyzer") as app:
             sum_url = gr.Textbox(label="YouTube link", placeholder="https://www.youtube.com/watch?v=...", scale=5)
             sum_btn = gr.Button("Summarize", variant="primary", scale=1)
         gr.Examples([EXAMPLE_VIDEO], inputs=sum_url)
-        with gr.Row(equal_height=True):
-            with gr.Column(elem_classes="panel"):
-                gr.HTML("<div class='panel-title'>LLM summary · abstractive</div>")
-                llm_out = gr.Markdown()
-            with gr.Column(elem_classes="panel"):
-                gr.HTML("<div class='panel-title'>TF-IDF summary · extractive</div>")
-                ext_out = gr.Markdown()
-        sum_btn.click(summarize_fn, inputs=sum_url, outputs=[llm_out, ext_out])
-        sum_url.submit(summarize_fn, inputs=sum_url, outputs=[llm_out, ext_out])
+        sum_thumb = gr.HTML()
+        with gr.Column(elem_classes="panel"):
+            gr.HTML("<div class='panel-title'>Summary</div>")
+            llm_out = gr.Markdown()
+        sum_btn.click(summarize_fn, inputs=sum_url, outputs=[sum_thumb, llm_out])
+        sum_url.submit(summarize_fn, inputs=sum_url, outputs=[sum_thumb, llm_out])
 
     with gr.Tab("🔎 Recommend"):
         with gr.Row(equal_height=True):
@@ -181,13 +195,14 @@ with gr.Blocks(title="YouTube AI Analyzer") as app:
             sent_url = gr.Textbox(label="YouTube link", placeholder="https://www.youtube.com/watch?v=...", scale=5)
             sent_btn = gr.Button("Analyze comments", variant="primary", scale=1)
         gr.Examples([EXAMPLE_VIDEO], inputs=sent_url)
+        sent_thumb = gr.HTML()
         with gr.Column(visible=False) as sent_results:
             sent_md = gr.Markdown(elem_classes="panel")
             with gr.Row():
                 pie = gr.Plot(show_label=False)
                 hist = gr.Plot(show_label=False)
             sent_df = gr.Dataframe(wrap=True, max_height=400, column_widths=["70%", "15%", "15%"])
-        outputs = [pie, hist, sent_md, sent_df, sent_results]
+        outputs = [pie, hist, sent_md, sent_df, sent_results, sent_thumb]
         # The outputs are hidden while it runs, so show the progress spinner on the button.
         sent_btn.click(sentiment_fn, inputs=sent_url, outputs=outputs, show_progress_on=sent_btn)
         sent_url.submit(sentiment_fn, inputs=sent_url, outputs=outputs, show_progress_on=sent_btn)
