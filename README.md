@@ -2,7 +2,7 @@
 
 AI-powered YouTube analyzer that **summarizes videos**, **recommends related content**, and **analyzes comment sentiment**. Built with Python, Gradio, Transformers, spaCy, and Gemini.
 
-> **Status:** all three features work end to end. This is a solo project, built in phases; the written report is the last thing left. See the [Roadmap](#roadmap).
+> **Status:** all three features work end to end.
 
 ---
 
@@ -123,51 +123,6 @@ Results render as HTML cards with a thumbnail, a clickable title, the match perc
 4. Outputs: an overall verdict (the most common label), a Plotly donut chart of the labels, a histogram of confidence scores, and the full comment table.
 5. **Keywords:** positive and negative comments go through spaCy separately. The app keeps lemmas of non-stopword nouns and uses `Counter` to find the top 10 for each group, for example *"people complaining mention: audio, ads, length."*
 
-## Roadmap
-
-Each phase has a checkpoint that must pass before moving on.
-
-- [x] **Phase 0: Setup.** venv, dependencies, API keys, `.env`.
-  *Checkpoint:* `import gradio, transformers, spacy` runs.
-- [x] **Phase 1: `youtube_utils.py`.** `get_video_id`, `get_transcript`, `search_videos`, `get_comments`, video metadata.
-  *Checkpoint:* for a real link, print its transcript, 5 search results, and 10 comments.
-- [x] **Phase 2: `sentiment.py`.** Cleaning, classification, charts, spaCy keywords.
-  *Checkpoint:* on a popular video, the pie chart looks sensible and the negative keywords match what the comments say.
-- [x] **Phase 3: `summarizer.py`.** Gemini summary + TF-IDF extractive summary.
-  *Checkpoint:* the summary of a 10-minute video is accurate (watch it to check).
-- [x] **Phase 4: `recommender.py`.** Embedding rerank + "more like this" mode.
-  *Checkpoint:* for "linear regression", the reranked order makes more sense than YouTube's raw order.
-- [x] **Phase 5: `app.py`.** Styled Gradio UI with three tabs, `gr.Error` popups, HTML thumbnail cards.
-  *Checkpoint:* all three tabs work back to back on 3 different videos.
-- [ ] **Phase 6: Polish.**
-  - [x] Edge-case testing
-  - [x] A loading hint
-  - [x] `pip freeze > requirements.txt`
-  - [ ] The report
-
-### Edge cases
-
-- [x] YouTube Shorts link: the ID is parsed correctly.
-- [x] Non-English video: the transcript falls back to the available language, and Gemini summarizes it in English.
-- [x] Garbage or non-YouTube link: popup saying "That doesn't look like a YouTube link."
-- [x] Empty input: popup asking for a topic or link.
-- [x] Video that doesn't exist: popups in the Sentiment and Recommend tabs.
-- [ ] Video with comments disabled: goes through the same `HttpError` path as a missing video, but hasn't been tested on a real video yet.
-- [ ] Video with no captions at all: handled with a "no captions" popup, but hasn't been tested on a real video yet.
-
-## Course mapping
-
-| Feature | Technique | Lesson |
-|---------|-----------|--------|
-| Video ID parsing, comment cleaning | Regex | L30 |
-| Keyword extraction | spaCy | L31 |
-| Search results, sentiment tables | Pandas | L13 |
-| Sentiment pie chart and histogram | Plotly | L15 |
-| Recommendation reranking | KNN / cosine similarity | L22 |
-| Web interface | Gradio | L32 |
-| Sentiment model, embeddings | PyTorch / Transformers | L41 |
-| Abstractive summary | LLM (Gemini) | L45 |
-
 ## Notes and gotchas
 
 - **YouTube API quota:** 10,000 units per day. A `search` costs **100 units**, and a comments or videos call costs about **1**. Don't put search in a loop while testing.
@@ -176,19 +131,6 @@ Each phase has a checkpoint that must pass before moving on.
 - **API keys in logs:** a `googleapiclient` `HttpError` message includes the request URL, and that URL contains your YouTube API key. The code prints only the status code and reason, never the whole error.
 - **Load models once.** The sentiment pipeline and the embedding model are created at module import, not inside functions. Otherwise they reload on every button click.
 - **Run it locally.** Transcript fetching is often blocked from cloud hosts such as Hugging Face Spaces, so demo on your own machine.
-
-## Troubleshooting
-
-| Error | Likely cause | Fix |
-|-------|--------------|-----|
-| `TranscriptsDisabled` / `NoTranscriptFound` | The video has no captions in any language | Try another video. The app shows a popup. |
-| `HttpError 403` on comments | Comments are disabled on the video | Expected. The app shows a popup. |
-| `HttpError 403 quotaExceeded` | Daily YouTube quota is used up | Wait until the quota resets (midnight Pacific time). |
-| `OSError: [E050] Can't find model 'en_core_web_sm'` | spaCy model not downloaded | `python -m spacy download en_core_web_sm` |
-| `AttributeError: ... has no attribute 'fetch'` | Old `youtube-transcript-api` | `pip install -U youtube-transcript-api` |
-| Gemini `404 model not found` | Model was renamed or retired | Update `GEMINI_MODEL` from AI Studio. |
-| Gemini `503 UNAVAILABLE` / `429` | Model overloaded, or the free-tier rate limit was hit | Handled automatically by the fallback models. If all of them fail, wait a few minutes. |
-| `MemoryError` or a very slow first run | Two copies of the app are running, and each one loads all the models | Run only one copy of `app.py`. |
 
 ## License
 

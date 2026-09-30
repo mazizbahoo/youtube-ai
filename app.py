@@ -10,16 +10,43 @@ from youtube_utils import get_comments, get_transcript, get_video_id, get_video_
 
 EXAMPLE_VIDEO = "https://www.youtube.com/watch?v=aircAruvnKk"
 
+BG = "#040404"       # page background: rgb(4, 4, 4)
+SURFACE = "#161616"  # cards, panels, blocks: rgb(22, 22, 22)
+BORDER = "#2a2a2a"   # subtle borders between surfaces
+
+# "neutral" grays have no blue tint (the old "slate" palette did).
+# The colors are set for both light and dark mode, and FORCE_DARK below keeps
+# the page in dark mode so text stays light on these dark surfaces.
 THEME = gr.themes.Soft(
     primary_hue="red",
-    neutral_hue="slate",
+    neutral_hue="neutral",
     font=[gr.themes.GoogleFont("Inter"), "system-ui", "sans-serif"],
 ).set(
+    body_background_fill=BG,
+    body_background_fill_dark=BG,
+    background_fill_primary_dark=BG,
+    background_fill_secondary_dark=SURFACE,
+    block_background_fill_dark=SURFACE,
+    panel_background_fill_dark=SURFACE,
+    input_background_fill_dark=BG,
+    input_background_fill_focus_dark=BG,
+    border_color_primary_dark=BORDER,
+    block_border_color_dark=BORDER,
+    input_border_color_dark=BORDER,
+    table_even_background_fill_dark=SURFACE,
+    table_odd_background_fill_dark=BG,
+    button_secondary_background_fill_dark=SURFACE,
     button_primary_background_fill="#e62117",
+    button_primary_background_fill_dark="#e62117",
     button_primary_background_fill_hover="#c81b12",
+    button_primary_background_fill_hover_dark="#c81b12",
     button_primary_text_color="white",
+    button_primary_text_color_dark="white",
     block_radius="12px",
 )
+
+# Runs in the browser on page load: switch Gradio to its dark mode.
+FORCE_DARK = "() => { document.body.classList.add('dark'); }"
 
 CSS = """
 .gradio-container { width: 100% !important; max-width: 1100px !important; margin: 0 auto !important; }
@@ -40,6 +67,7 @@ CSS = """
 .rec-meta { opacity: .7; font-size: .9rem; margin-top: 4px; }
 .rec-badge { display: inline-block; margin-top: 8px; padding: 2px 10px; border-radius: 999px;
              font-size: .8rem; font-weight: 600; background: rgba(230, 33, 23, .12); color: #e62117; }
+button.gallery-item { margin: 2px !important; }
 @media (max-width: 640px) {
   .rec-card { flex-direction: column; }
   .rec-card img { width: 100%; }
@@ -112,7 +140,9 @@ def sentiment_fn(url):
         f"👍 **People who liked it mention:** {', '.join(kw['positive']) or '—'}\n\n"
         f"👎 **People complaining mention:** {', '.join(kw['negative']) or '—'}"
     )
-    return sentiment.pie_chart(counts), sentiment.score_histogram(df), report, df
+    # The last value un-hides the results column (it starts hidden so the page has no
+    # empty placeholder boxes before the first analysis).
+    return sentiment.pie_chart(counts), sentiment.score_histogram(df), report, df, gr.Column(visible=True)
 
 
 with gr.Blocks(title="YouTube AI Analyzer") as app:
@@ -151,15 +181,17 @@ with gr.Blocks(title="YouTube AI Analyzer") as app:
             sent_url = gr.Textbox(label="YouTube link", placeholder="https://www.youtube.com/watch?v=...", scale=5)
             sent_btn = gr.Button("Analyze comments", variant="primary", scale=1)
         gr.Examples([EXAMPLE_VIDEO], inputs=sent_url)
-        sent_md = gr.Markdown(elem_classes="panel")
-        with gr.Row():
-            pie = gr.Plot(show_label=False)
-            hist = gr.Plot(show_label=False)
-        sent_df = gr.Dataframe(wrap=True, max_height=400, column_widths=["70%", "15%", "15%"])
-        outputs = [pie, hist, sent_md, sent_df]
-        sent_btn.click(sentiment_fn, inputs=sent_url, outputs=outputs)
-        sent_url.submit(sentiment_fn, inputs=sent_url, outputs=outputs)
+        with gr.Column(visible=False) as sent_results:
+            sent_md = gr.Markdown(elem_classes="panel")
+            with gr.Row():
+                pie = gr.Plot(show_label=False)
+                hist = gr.Plot(show_label=False)
+            sent_df = gr.Dataframe(wrap=True, max_height=400, column_widths=["70%", "15%", "15%"])
+        outputs = [pie, hist, sent_md, sent_df, sent_results]
+        # The outputs are hidden while it runs, so show the progress spinner on the button.
+        sent_btn.click(sentiment_fn, inputs=sent_url, outputs=outputs, show_progress_on=sent_btn)
+        sent_url.submit(sentiment_fn, inputs=sent_url, outputs=outputs, show_progress_on=sent_btn)
 
 
 if __name__ == "__main__":
-    app.launch(theme=THEME, css=CSS)
+    app.launch(theme=THEME, css=CSS, js=FORCE_DARK)
