@@ -57,8 +57,15 @@ CSS = """
          padding: 16px 18px; background: var(--block-background-fill); min-height: 120px; }
 .panel-title { font-size: .8rem; font-weight: 600; letter-spacing: .06em;
                text-transform: uppercase; opacity: .6; margin-bottom: 6px; }
-.thumb { width: 100%; max-width: 480px; border-radius: 12px; display: block; }
-.loading { opacity: .7; font-style: italic; }
+.video-card { display: flex; gap: 20px; align-items: flex-start; margin: 8px 0; }
+.video-card a:focus { outline: none; }
+.video-card .thumb { width: 360px; max-width: 45%; border-radius: 12px; display: block; flex-shrink: 0; }
+.video-card .title { font-weight: 600; font-size: 1.2rem; text-decoration: none;
+                     color: var(--body-text-color); }
+.video-card .title:hover { color: #e62117; }
+.video-desc { opacity: .7; font-size: .9rem; margin-top: 8px; white-space: pre-line;
+              display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.loading { text-align: center; padding: 28px 0; opacity: .8; font-style: italic; font-size: 1.05rem; }
 .rec-card { display: flex; gap: 16px; align-items: flex-start; padding: 12px;
             border: 1px solid var(--border-color-primary); border-radius: 12px;
             background: var(--block-background-fill); margin-bottom: 12px; }
@@ -73,6 +80,8 @@ button.gallery-item { margin: 2px !important; }
 @media (max-width: 640px) {
   .rec-card { flex-direction: column; }
   .rec-card img { width: 100%; }
+  .video-card { flex-direction: column; }
+  .video-card .thumb { width: 100%; max-width: 100%; }
 }
 """
 
@@ -80,11 +89,23 @@ button.gallery-item { margin: 2px !important; }
 LOADING = "<p class='loading'>Loading...</p>"
 
 
-def thumbnail_html(video_id):
-    """The video's thumbnail from YouTube's image CDN (no API quota needed)."""
+def video_card(video_id):
+    """Thumbnail with the video's title, channel and a truncated description beside it."""
     link = f"https://www.youtube.com/watch?v={video_id}"
-    return (f"<a href='{link}' target='_blank'>"
-            f"<img class='thumb' src='https://i.ytimg.com/vi/{video_id}/hqdefault.jpg' alt=''></a>")
+    # The thumbnail comes from YouTube's image CDN (no API quota needed).
+    thumb = (f"<a href='{link}' target='_blank'>"
+             f"<img class='thumb' src='https://i.ytimg.com/vi/{video_id}/hqdefault.jpg' alt=''></a>")
+    try:
+        info = get_video_info(video_id)
+    except Exception as e:
+        print(f"[video_card] {type(e).__name__}")
+        info = None
+    details = ""
+    if info:
+        details = (f"<div><a class='title' href='{link}' target='_blank'>{html.escape(info['title'])}</a>"
+                   f"<div class='rec-meta'>{html.escape(info['channel'])}</div>"
+                   f"<div class='video-desc'>{html.escape(info['description'])}</div></div>")
+    return f"<div class='video-card'>{thumb}{details}</div>"
 
 
 def summarize_fn(url):
@@ -92,7 +113,8 @@ def summarize_fn(url):
     if not video_id:
         raise gr.Error("That doesn't look like a YouTube link.")
     # Show the thumbnail and a loading note right away so the page doesn't look frozen.
-    yield thumbnail_html(video_id), LOADING
+    card = video_card(video_id)
+    yield card, LOADING
     text = get_transcript(video_id)
     if not text:
         raise gr.Error("This video has no captions, so it can't be summarized.")
@@ -100,7 +122,7 @@ def summarize_fn(url):
         llm = summarizer.llm_summary(text)
     except Exception as e:
         llm = f"*LLM summary failed: {e}*"
-    yield thumbnail_html(video_id), llm
+    yield card, llm
 
 
 def results_html(df):
@@ -124,16 +146,20 @@ def recommend_fn(query):
     if not query:
         raise gr.Error("Type a topic or paste a YouTube link.")
     video_id = get_video_id(query)
+    header = ""
     if video_id:
         info = get_video_info(video_id)
         if not info:
             raise gr.Error("Couldn't find that video.")
+        header = video_card(video_id) + "<div class='panel-title' style='margin-top:16px'>Similar videos</div>"
+        yield header + LOADING
         df = recommender.recommend_similar(video_id, info)
     else:
+        yield LOADING
         df = recommender.recommend(query)
     if df.empty:
         raise gr.Error("No results found.")
-    return results_html(df)
+    yield header + results_html(df)
 
 
 def sentiment_fn(url):
@@ -141,7 +167,8 @@ def sentiment_fn(url):
     if not video_id:
         raise gr.Error("That doesn't look like a YouTube link.")
     # Show the thumbnail and a loading note right away so the page doesn't look frozen.
-    yield gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), thumbnail_html(video_id) + LOADING
+    card = video_card(video_id)
+    yield gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), card + LOADING
     comments = get_comments(video_id)
     if comments is None:
         raise gr.Error("Comments are disabled on this video (or it doesn't exist).")
@@ -159,7 +186,7 @@ def sentiment_fn(url):
     # The last value un-hides the results column (it starts hidden so the page has no
     # empty placeholder boxes before the first analysis).
     yield (sentiment.pie_chart(counts), sentiment.score_histogram(df), report, df,
-           gr.Column(visible=True), thumbnail_html(video_id))
+           gr.Column(visible=True), card)
 
 
 with gr.Blocks(title="YouTube AI Analyzer") as app:
